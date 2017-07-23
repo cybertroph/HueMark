@@ -1,0 +1,468 @@
+package com.cybertroph.huemark;
+
+import javax.imageio.ImageIO;
+import java.awt.*;
+import java.awt.image.BufferedImage;
+import java.io.*;
+
+/**
+ * Created by Solomon on 23-Jul-17.
+ */
+public class HueMark {
+    private final int ALGO_VERSION = 1;
+    private int maxChar = 0;
+    private long count = 0;
+    private String fileName = "";
+    //private BufferedImage image;
+
+    public HueMark() {
+    }
+
+    public BufferedImage encode(String inputFileName) {
+        this.fileName = inputFileName;
+        try {
+            //Creating Metadata
+            FileReader fr = new FileReader(fileName);
+            BufferedReader br = new BufferedReader(fr);
+            int c = br.read();
+            maxChar = c;
+            while (c != -1) {
+                //System.out.println((char)c);
+                if (c > maxChar) {
+                    maxChar = c;
+                }
+                count++;
+                c = br.read();
+            }
+
+            //System.out.println("max\t\t:\t"+maxChar+"\t\t"+(char)maxChar);
+            //System.out.println("count\t:\t"+count);
+            int spaceTaken = (Integer.toHexString(maxChar)).length();
+            boolean isMaxHalf = false;
+            double fullVal = Math.pow(16, spaceTaken);
+            double halfVal = fullVal / 2;
+            //System.out.println("maxVal\t:\t"+maxVal);
+            //System.out.println("halfVal\t:\t"+halfVal);
+            if (maxChar < halfVal) {
+                isMaxHalf = true;
+            }
+            fr.close();
+            br.close();
+
+            //System.out.println("isMxHf\t:\t"+isMaxHalf);
+            //System.out.println("space\t:\t"+spaceTaken);
+            //System.out.println(Integer.toHexString(maxChar));
+            //System.out.println(Integer.toBinaryString(maxChar));
+            //System.out.println((maxChar/16));
+
+            long dataPixels = (long) Math.ceil((double) (count * spaceTaken) / (double) 6);
+            //System.out.println("dataPx\t:\t"+dataPixels);
+
+            StringBuffer metadataStr = new StringBuffer(createMetaData(ALGO_VERSION, maxChar, count));
+            int metaPixels = metadataStr.length() / 6;
+            long totalPixels = metaPixels + dataPixels;
+            //System.out.println("metaPx\t:\t"+metaPixels);
+            //System.out.println("totalPx\t:\t"+(metaPixels+dataPixels));
+            if (totalPixels % 2 != 0) {
+                totalPixels++;
+            }
+            //TODO: find appropriate width and height of image
+            int tWidth = calcWidth(totalPixels);
+            int tHeight = (int) (totalPixels / tWidth);
+
+            int widthPx = tWidth;
+            int heightPx = tHeight;
+
+            double ratio = (double) tWidth / (double) tHeight;
+            if (ratio > 1.777778) {
+                widthPx = tHeight;
+                heightPx = tWidth;
+            }
+            //System.out.println("dim\t:\t"+widthPx+" x "+heightPx);
+
+            BufferedImage image = new BufferedImage(widthPx, heightPx, BufferedImage.TYPE_INT_RGB);
+            int indexX = 0;
+            int indexY = 0;
+
+            //initialize image with black
+            for (int x = 0; x < widthPx; x++) {
+                for (int y = 0; y < heightPx; y++) {
+                    image.setRGB(x, y, Color.BLACK.getRGB());
+                }
+            }
+
+            //Write metadata to image
+
+            for (int i = 0; i < metaPixels; i++) {
+                String curPxColor = "#" + metadataStr.substring(0, 6);
+                //System.out.println(curPxColor+"\tx:"+indexX+",y:"+indexY);
+                metadataStr.delete(0, 6);
+                image.setRGB(indexX, indexY, Color.decode(curPxColor).getRGB());
+                indexX++;
+                if (indexX == widthPx) {
+                    indexX = 0;
+                    indexY++;
+                }
+            }
+
+            //System.out.println("Cursor after metadata       "+indexX+","+indexY);
+
+            System.out.println("--Metadata--");
+            System.out.println("Algorithm version           " + ALGO_VERSION);
+            System.out.println("Total characters present    " + count + " character(s)");
+            System.out.println("Max char size is            " + maxChar + " bits");
+            double metadataPercent = (double) 100 * (double) (metaPixels) / (double) (totalPixels);
+            System.out.println("Metadata Pixel count        " + metaPixels + "px\t(" + metadataPercent + "%)");
+            double dataPercent = (double) 100 * (double) (dataPixels) / (double) (totalPixels);
+            System.out.println("Data Pixel count            " + dataPixels + "px\t(" + dataPercent + "%)");
+            double wastePercent = (double) 100 * (double) ((totalPixels - (metaPixels + dataPixels))) / (double) (totalPixels);
+            System.out.println("Wasted Data Pixel count     " + (totalPixels - (metaPixels + dataPixels)) + "px\t(" + wastePercent + "%)");
+            //System.out.println("Extra space Pixel count " + (totalPixels - (metaPixels + dataPixels)));
+            System.out.println("Total adjusted Pixel count  " + totalPixels + "px");
+            System.out.println("Image width                 " + widthPx + "px");
+            System.out.println("Image Height                " + heightPx + "px");
+            System.out.println("Image Dimensions            " + widthPx + "x" + heightPx + " (" + totalPixels + "px)");
+
+
+            //Creating pixels
+            fr = new FileReader(fileName);
+            br = new BufferedReader(fr);
+            c = br.read();
+            StringBuffer stringBuffer = new StringBuffer();
+            while (c != -1) {
+                String hexed = padHex(Integer.toHexString(c), spaceTaken);
+                //System.out.println((char)c + "\t" + hexed);
+                stringBuffer.append(hexed);
+                if (stringBuffer.length() > 6) {
+                    //System.out.println("this\t" + stringBuffer.substring(0, 6));
+                    String curPxColor = "#" + stringBuffer.substring(0, 6);
+                    stringBuffer.delete(0, 6);
+                    //System.out.println(curPxColor+"\tx:"+indexX+",y:"+indexY);
+                    image.setRGB(indexX, indexY, Color.decode(curPxColor).getRGB());
+                    indexX++;
+                    if (indexX == widthPx) {
+                        indexX = 0;
+                        indexY++;
+                    }
+                }
+
+                count++;
+                c = br.read();
+            }
+            while (stringBuffer.length() >= 6) {
+                //System.out.println("this\t" + stringBuffer.substring(0, 6));
+                String curPxColor = "#" + stringBuffer.substring(0, 6);
+                stringBuffer.delete(0, 6);
+                //System.out.println(curPxColor+"\tx:"+indexX+",y:"+indexY);
+                image.setRGB(indexX, indexY, Color.decode(curPxColor).getRGB());
+                indexX++;
+                if (indexX == widthPx) {
+                    indexX = 0;
+                    indexY++;
+                }
+
+            }
+            if (stringBuffer.length() < 6 && stringBuffer.length() > 0) {
+                String postPadded = padHexPost(stringBuffer.substring(0, stringBuffer.length()), 6);
+                //System.out.println("this\t" + postPadded);
+                String curPxColor = "#" + postPadded;
+                //stringBuffer.delete(0, 6);
+                //System.out.println(curPxColor+"\tx:"+indexX+",y:"+indexY);
+                image.setRGB(indexX, indexY, Color.decode(curPxColor).getRGB());
+                indexX++;
+                if (indexX == widthPx) {
+                    indexX = 0;
+                    indexY++;
+                }
+            }
+            //System.out.println("Cursor after data           "+indexX+","+indexY);
+            //System.out.println(stringBuffer);
+            //System.out.println(stringBuffer.length());
+
+            fr.close();
+            br.close();
+
+            return alterImage(image);
+        } catch (IOException e) {
+            e.printStackTrace();
+            return null;
+        }
+    }
+
+    private String padHex(String str, int len) {
+        if (str.length() < len) {
+            String temp = "";
+            for (int i = 0; i < len - str.length(); i++) {
+                temp += "0";
+            }
+            return temp + str;
+        } else {
+            return str;
+        }
+    }
+
+    private int calcWidth(long totalPx) {
+        int sqrt = (int) Math.floor(Math.sqrt(totalPx));
+
+        int tWidth = sqrt;
+        for (int i = sqrt; i > 1; i++) {
+            if (totalPx % i == 0) {
+                tWidth = i;
+                break;
+            }
+        }
+
+        int tHeight = (int) (totalPx / tWidth);
+        if (tHeight > tWidth) {
+            return tHeight;
+        }
+
+        return tWidth;
+    }
+
+    private String createMetaData(int algoVer, int maxChar, long count) {
+        //System.out.println("Metadata");
+        String metadataStr = "";
+        final String PADDING = "000000";
+        String algoVerHexPad = padHex(Integer.toHexString(algoVer), 6);
+        //System.out.println("this\t"+algoVerHexPad);
+        metadataStr += algoVerHexPad;
+
+        StringBuffer maxCharHex = new StringBuffer(Integer.toHexString(maxChar));
+        while (maxCharHex.length() >= 6) {
+            //System.out.println("this\t"+maxCharHex.substring(0,6));
+            metadataStr += maxCharHex.substring(0, 6);
+            maxCharHex.delete(0, 6);
+        }
+        if (maxCharHex.length() < 6 && maxCharHex.length() > 0) {
+            //System.out.println("this\t"+padHex(maxCharHex.substring(0,maxCharHex.length()),6));
+            metadataStr += padHex(maxCharHex.substring(0, maxCharHex.length()), 6);
+        }
+        metadataStr += PADDING;
+
+        StringBuffer maxCountHex = new StringBuffer(Long.toHexString(count));
+        while (maxCountHex.length() >= 6) {
+            //System.out.println("this\t"+maxCountHex.substring(0,6));
+            metadataStr += maxCountHex.substring(0, 6);
+            maxCountHex.delete(0, 6);
+        }
+        if (maxCountHex.length() < 6 && maxCountHex.length() > 0) {
+            //System.out.println("this\t"+padHex(maxCountHex.substring(0,maxCountHex.length()),6));
+            metadataStr += padHex(maxCountHex.substring(0, maxCountHex.length()), 6);
+        }
+        metadataStr += PADDING;
+
+        //System.out.println(metadataStr);
+        return metadataStr;
+    }
+
+    private String padHexPost(String str, int len) {
+        if (str.length() < len) {
+            String temp = "";
+            for (int i = 0; i < len - str.length(); i++) {
+                temp += "0";
+            }
+            return str + temp;
+        } else {
+            return str;
+        }
+    }
+
+    public void saveBmp(BufferedImage image, final String imageName) {
+        try {
+            final String extension = ".bmp";
+            ImageIO.write(image, "bmp", new File((imageName + extension)));
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    public void saveBmp(BufferedImage image) {
+        try {
+            String imageName = "";
+            String[] splits = fileName.split("\\.");
+            for (int i = 0; i < splits.length - 1; i++) {
+                imageName += splits[i] + ".";
+            }
+            imageName += "bmp";
+            ImageIO.write(image, "bmp", new File((imageName)));
+            System.out.println("Output saved to             " + imageName);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    public void decode(String inputImageName, String outputFileName) {
+        decodeSub(inputImageName, outputFileName);
+    }
+
+    public void decode(String inputImageName) {
+        String outputFileName = "";
+        String[] splits = inputImageName.split("\\.");
+        for (int i = 0; i < splits.length - 1; i++) {
+            outputFileName += splits[i] + ".";
+        }
+        outputFileName += "txt";
+        decodeSub(inputImageName, outputFileName);
+    }
+
+    private void decodeSub(String inputImageName, String outputFileName) {
+        System.out.println("--Decoding Image--");
+        try {
+            File imgFile = new File(inputImageName);
+            BufferedImage bImage = ImageIO.read(imgFile);
+            bImage = alterImage(bImage);
+            int widthPx = bImage.getWidth();
+            int heightPx = bImage.getHeight();
+            System.out.println("Width                       " + widthPx);
+            System.out.println("Height                      " + heightPx);
+
+            int algoVer = Integer.parseInt(rgbToHex(bImage.getRGB(0, 0)), 16);
+            System.out.println("Algorithm Version           " + algoVer);
+
+            int indexX = 1;
+            int indexY = 0;
+            //For algorithm version 1
+            if (algoVer == 1) {
+                //get max char value
+                String curVal = rgbToHex(bImage.getRGB(indexX, indexY));
+                String maxCharValHexString = "";
+                while (!curVal.equals("000000")) {
+                    maxCharValHexString += rgbToHex(bImage.getRGB(indexX, indexY));
+                    indexX++;
+                    if (indexX == widthPx) {
+                        indexX = 0;
+                        indexY++;
+                    }
+                    curVal = rgbToHex(bImage.getRGB(indexX, indexY));
+                }
+
+                maxChar = Integer.parseInt(maxCharValHexString, 16);
+                System.out.println("Max char size is            " + maxChar + " bits");
+                indexX++;
+                if (indexX == widthPx) {
+                    indexX = 0;
+                    indexY++;
+                }
+                //System.out.println("pointer is on "+indexX+","+indexY);
+
+                //Getting total characters present
+                curVal = rgbToHex(bImage.getRGB(indexX, indexY));
+                String totalCharHexVal = "";
+                while (!curVal.equals("000000")) {
+                    totalCharHexVal += rgbToHex(bImage.getRGB(indexX, indexY));
+                    indexX++;
+                    if (indexX == widthPx) {
+                        indexX = 0;
+                        indexY++;
+                    }
+                    curVal = rgbToHex(bImage.getRGB(indexX, indexY));
+                }
+                count = Long.parseLong(totalCharHexVal, 16);
+                System.out.println("Total character present     " + count + " character(s)");
+                indexX++;
+                if (indexX == widthPx) {
+                    indexX = 0;
+                    indexY++;
+                }
+
+                //decode data here
+                FileWriter fw = new FileWriter(outputFileName);
+                BufferedWriter bw = new BufferedWriter(fw);
+
+                //System.out.println("pointer is on "+indexX+","+indexY);
+                int spaceTaken = (Integer.toHexString(maxChar)).length();
+                //StringBuffer tempOutput = new StringBuffer();
+                //System.out.println("spaceTaken : "+spaceTaken);
+                System.out.println("Decoding...");
+                StringBuffer stringBuffer = new StringBuffer();
+                long dataPixels = (long) Math.ceil((double) (count * spaceTaken) / (double) 6);
+                int charRead = 0;
+                for (int i = 0; i < dataPixels; i++) {
+                    curVal = rgbToHex(bImage.getRGB(indexX, indexY));
+                    stringBuffer.append(curVal);
+                    //System.out.println(curVal);
+                    indexX++;
+                    if (indexX == widthPx) {
+                        indexX = 0;
+                        indexY++;
+                    }
+                    if (stringBuffer.length() >= spaceTaken) {
+                        int c = Integer.parseInt(stringBuffer.substring(0, spaceTaken), 16);
+                        bw.write(c);
+                        //tempOutput.append((char)c);
+                        charRead++;
+                        double percentComplete = ((double) 100 * (double) charRead / (double) count);
+                        if (percentComplete % 10 == 0) {
+                            System.out.println(percentComplete + "%\tdecoded");
+                        }
+                        stringBuffer.delete(0, spaceTaken);
+                    }
+                }
+                while (charRead < count) {
+                    int c = Integer.parseInt(stringBuffer.substring(0, spaceTaken), 16);
+                    bw.write(c);
+                    //tempOutput.append((char)c);
+                    charRead++;
+                    double percentComplete = ((double) 100 * (double) charRead / (double) count);
+                    if (percentComplete % 10 == 0) {
+                        System.out.println(percentComplete + "%\tdecoded");
+                    }
+                    stringBuffer.delete(0, spaceTaken);
+                }
+                //System.out.println(tempOutput);
+                bw.flush();
+                bw.close();
+                fw.close();
+                System.out.println("Decoding complete file saved to " + outputFileName);
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private String rgbToHex(int rgb) {
+        Color mCol = new Color(rgb);
+        int rr = mCol.getRed();
+        int gg = mCol.getGreen();
+        int bb = mCol.getBlue();
+        String red = padHex(Integer.toHexString(rr), 2);
+        String green = padHex(Integer.toHexString(gg), 2);
+        String blue = padHex(Integer.toHexString(bb), 2);
+        return red + green + blue;
+    }
+
+    private BufferedImage alterImage(BufferedImage image) {
+        //Invert image
+        /*
+        for(int x=0;x<image.getWidth();x++){
+            for(int y=0;y<image.getHeight();y++){
+                Color curColor = new Color(image.getRGB(x,y));
+                int rr = curColor.getRed();
+                int gg = curColor.getGreen();
+                int bb = curColor.getBlue();
+                Color invColor = new Color(255-rr,255-gg,255-bb);
+                image.setRGB(x,y,invColor.getRGB());
+            }
+        }
+        */
+        return image;
+    }
+
+    public static void main(String[] args) {
+
+        HueMark hm = new HueMark();
+
+        //Encoding
+        String inputTextFileName = "input.txt";
+        //pass below output file name without extension (it will be saved as .bmp)
+        String outputImageFileName = "input";
+        BufferedImage opImage = hm.encode(inputTextFileName);
+        hm.saveBmp(opImage,outputImageFileName);
+
+        //Decoding
+        String inputImageFileName = "input.bmp";
+        String outputTextFileName = "output.txt";
+        hm.decode(inputImageFileName, outputTextFileName);
+    }
+}
